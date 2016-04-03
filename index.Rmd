@@ -1,0 +1,158 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Warhamni Jani"
+date: "March 31, 2016"
+output: html_document
+---
+
+##Synopsis
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways:
+  Class A: exactly according to the specification (proper execution)
+
+  Class B: throwing the elbows to the front (common mistake)
+
+  Class C: lifting the dumbbell only halfway (common mistake)
+
+  Class D: lowering the dumbbell only halfway (common mistake)
+
+  Class F: Throwing the hips to the front (common mistake)
+
+##Data 
+
+The training data for this project are available here: 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+##Project Submission Goal
+
+The goal of the project is:
+*to predict the manner in which they did the exercise. This is the "classe" variable in the training set. 
+*may use any of the other variables to predict with. 
+*should create a report describing how the built of the model, how to use cross validation, what is the expected out of sample error is, and why the choices are made. Then, use the prediction model to predict 20 different test cases. 
+
+Set up the environment using the following chunk
+```{r}
+library(caret)
+library(kernlab)
+library(ggplot2)
+library(randomForest)
+```
+ 
+Examine the data given
+ 
+```{r}
+Training <- read.csv(file="pml-training.csv", na.strings = c("NA","","#DIV/0!"))
+Testing <- read.csv(file="pml-testing.csv", na.strings = c("NA","#DIV/0!",""))
+
+#Testing$classe<- as.factor(Testing$classe)
+Training$classe<-as.factor(Training$classe)
+
+dim(Training)
+dim(Testing)
+summary(Training$classe)
+```
+
+Handling Missing Values
+
+```{r}
+NAs = apply(Training,2,function(x) {sum(is.na(x))}) 
+Training = Training[,which(NAs == 0)]
+NAs = apply(Testing,2,function(x) {sum(is.na(x))}) 
+Testing = Testing[,which(NAs == 0)]
+
+```
+
+Preprocessing the variable
+```{r}
+pre_Proc = which(lapply(Training, class) %in% "numeric")
+
+pre_Obj<- preProcess(Training[,pre_Proc],method=c('knnImpute', 'center', 'scale'))
+train <- predict(pre_Obj, Training[,pre_Proc])
+train$classe = Training$classe
+
+test <- predict(pre_Obj,Testing[,pre_Proc])
+```
+
+Non-zero Variables
+
+To remove the non-zero variables
+```{r}
+nzv <- nearZeroVar(train,saveMetrics=TRUE)
+train <- train[,nzv$nzv==FALSE]
+
+nzv <- nearZeroVar(test,saveMetrics=TRUE)
+test <- test[,nzv$nzv==FALSE]
+```
+
+Cross validations
+
+Next, we split the data into one set for training and one set for cross validation. The cross validation set will be used as the train control method for our model.
+```{r}
+set.seed(32343)
+
+inTrain <- createDataPartition(train$classe, p = 0.7, list=FALSE)#70% train
+training <- train[inTrain,]
+crossValidation <- train[-inTrain,]
+dim(training)
+dim(crossValidation)
+```
+
+##Prediction Model
+In this section we will use Random Forest methods.
+
+Random Forest
+```{r}
+modelFitRF <- train(classe ~ ., data=training, method="rf")
+modelFitRF
+```
+
+Prediction 
+```{r}
+predictrf <- predict(modelFitRF, training)
+confusionMatrix(predictrf, training$classe)
+save(modelFitRF,file="/Users/WW/pmlrepo/practicalmachinelearning/fitrf.R")
+```
+
+Confusion Matrix for RF
+```{r}
+predictrfcross <- predict(modelFitRF, crossValidation)
+confusionMatrix(predictrfcross, crossValidation$classe)
+```
+
+
+##Conclusion
+Result
+
+Expected out-of-sample error
+
+Next we calculated the out-of-sample errorwhich usually estimated at 0.005, or 0.5%. The expected out-of-sample error is calculated as 1 - accuracy for predictions made against the cross-validation set. 
+```{r}
+Out_of_Sample_Error = 1-.9927
+Out_of_Sample_Error
+```
+
+Submission
+
+In this section the files for the project submission are generated using the random forest algorithm on the testing data.
+```{r}
+# Perform prediction
+predictSubmit <- predict(modelFitRF, test)
+predictSubmit
+```
+
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(predictSubmit)
+```
+
+
